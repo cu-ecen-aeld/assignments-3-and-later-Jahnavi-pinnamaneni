@@ -1,3 +1,14 @@
+/*
+* Application entry point
+*
+* This file takes writes the input string into the file whose path is specified
+* 
+* Inputs: File path and input string
+*
+* Author: Jahnavi Pinnamaneni; japi8358@colorado.edu
+*/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <syslog.h>
