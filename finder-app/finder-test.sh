@@ -9,16 +9,16 @@ NUMFILES=10
 WRITESTR=AELD_IS_FUN
 WRITEDIR=/tmp/aeld-data
 username=$(cat /etc/finder-app/conf/username.txt)
-FINDER = $(which finder.sh)
-WRITER = $(which writer)
+FINDER=$(which finder.sh)
+WRITER=$(which writer)
 
-if![$FINDER]
+if ! [ $FINDER ]
 then
 	echo "Finder not found"
 	exit 1
 fi
 
-if![$WRITER]
+if ! [ $WRITER ]
 then
 	echo "Writer not found"
 	exit 1
