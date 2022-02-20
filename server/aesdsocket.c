@@ -25,7 +25,7 @@ int server_socket;       //socket_fd
 int client_socket;       //client_fd
 //char *recv_buf = NULL;
 
-static void daemonise_process();
+void daemonise_process();
 
 /*
 Signal handler to gracefully terminate when signals SIGINT and SIGTERM arrive
@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
 
 
 //used to daemonize the current process
-static void daemonise_process()
+void daemonise_process()
 {
     pid_t pid;
 
