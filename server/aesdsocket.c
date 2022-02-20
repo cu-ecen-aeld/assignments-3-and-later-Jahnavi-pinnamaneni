@@ -34,8 +34,6 @@ parameter: signal number
 void graceful_shutdown(int signo)
 {
     syslog(LOG_DEBUG, "CAUGHT SIGNAL, EXITING GRACEFULLY \n");
-    //write(1,"Caught signal \n", 14);
-    //write(1,"Exiting gracefully\n", 19);
     remove("/var/tmp/aesdsocketdata");
     shutdown(client_socket, SHUT_RDWR);
     close(client_socket);
@@ -190,8 +188,9 @@ int main(int argc, char *argv[])
 
     }
 
-     lseek(store_fd, 0, SEEK_SET);
-
+    lseek(store_fd, 0, SEEK_SET);
+    store_fd = open("/var/tmp/aesdsocketdata", O_RDWR|O_CREAT|O_TRUNC, 0666);
+    syslog(LOG_DEBUG,"Entering socket write loop\n");
     while(1)
     {
         char temp;
@@ -211,6 +210,7 @@ int main(int argc, char *argv[])
         write(client_socket,&temp,1);
 
     }
+    syslog(LOG_DEBUG,"Exiting write loop!\n");
 
     shutdown(client_socket,SHUT_RDWR);
     close(client_socket);
