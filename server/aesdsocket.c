@@ -23,7 +23,9 @@ Author: Jahnavi Pinnamaneni; japi8358@colorado.edu
 #include <signal.h>
 int server_socket;       //socket_fd
 int client_socket;       //client_fd
-char *recv_buf = NULL;
+//char *recv_buf = NULL;
+
+void daemonise_process();
 
 /*
 Signal handler to gracefully terminate when signals SIGINT and SIGTERM arrive
@@ -39,8 +41,8 @@ void graceful_shutdown(int signo)
     close(client_socket);
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
-    if(recv_buf != NULL)
-    	free(recv_buf);
+    //if(recv_buf != NULL)
+    	//free(recv_buf);
     exit(0);
 }
 
@@ -76,7 +78,7 @@ int main(int argc, char *argv[])
     }
     
     int d_flag = 0;
-    if(argc == 2)
+  if(argc == 2)
     {
         if((strcmp(argv[1],"-d")) == 0)
         {
@@ -108,41 +110,9 @@ int main(int argc, char *argv[])
     syslog(LOG_DEBUG, "Binded successfully");
     freeaddrinfo(rp);
 
-    if(d_flag == 1){
-    d_flag = 0;
-    //Daemonizing the process
-    printf("Daemonizing the process\n");
-    pid_t pid, sid;
-    pid = fork();
-    if(pid < 0)
+    if(d_flag == 1)
     {
-        printf("Error forking");
-        perror("fork");
-        exit(EXIT_FAILURE);
-    }
-    if(pid > 0)
-    {
-        printf("Inside Parent process; Exiting\n");
-        //perror("fork");
-        exit(EXIT_SUCCESS);
-    }
-
-    umask(0);
-
-
-
-    sid = setsid();
-    if(sid < 0)
-    {
-        syslog(LOG_DEBUG,"New SID for child process failed\n");
-        exit(EXIT_FAILURE);
-    }
-    
-    chdir("/");
-
-    close(STDIN_FILENO);
-    close(STDOUT_FILENO);
-    close(STDERR_FILENO);
+        daemonise_process();
     }
     
     //File to store the recieved data
@@ -155,7 +125,7 @@ int main(int argc, char *argv[])
 
     //Server socket is established, next Client-Server connection should be made
     while(1){
-    listen(server_socket, 3);
+    listen(server_socket, 5);
     
     
     addr_size = sizeof(cl_addr);
@@ -167,8 +137,7 @@ int main(int argc, char *argv[])
     syslog(LOG_DEBUG, "Accepted connection to %s\n", str);
 
     //Client-Server connection is made.
-    recv_buf = (char *)malloc(1024);
-    memset(recv_buf, 0,1024);
+    char *recv_buf = (char *)malloc(1024);
     int realloc_cnt = 1;
     int recv_bytes = 0;
     int recv_buf_size = 0;
@@ -195,7 +164,6 @@ int main(int argc, char *argv[])
         {
             if(recv_buf[recv_buf_size-1] == '\n')
             {
-            	syslog(LOG_DEBUG,"%s",recv_buf);
                 written_bytes = write(store_fd, recv_buf, recv_buf_size);
                 if(written_bytes < 0)
                 {
@@ -239,7 +207,7 @@ int main(int argc, char *argv[])
         {
             break;
         }
-	//syslog(LOG_DEBUG,"%c",temp);
+
         write(client_socket,&temp,1);
 
     }
@@ -251,9 +219,51 @@ int main(int argc, char *argv[])
     	free(recv_buf);
     printf("Closed connection\n");
     }
-    shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
     close(store_fd);
 
     return 0;
+}
+
+
+//used to daemonize the current process
+void daemonise_process()
+{
+    pid_t pid;
+
+    pid = fork();
+
+    if(pid<0)
+    {
+        perror("fork");
+        exit(-1);
+    }
+
+    if(pid > 0)
+    {
+        //Parent Process: has to exit
+        printf("Parent Exiting!. Child PID = %d\n",pid);
+        exit(0);
+    }
+
+    //Child process executes from here on, i.e pid = 0
+
+    umask(0);
+
+    //Create a new session and set the child as group leader
+    pid = setsid();
+    
+    if(pid < 0)
+    {
+        perror("setsid");
+        exit(-1);
+    }
+
+    //Change working directory to root directory
+    chdir("/");
+
+    //close all file descriptors
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
 }
