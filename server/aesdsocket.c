@@ -186,10 +186,10 @@ int main(int argc, char *argv[])
             }            
         }
 
+
     }
 
     lseek(store_fd, 0, SEEK_SET);
-    store_fd = open("/var/tmp/aesdsocketdata", O_RDWR|O_CREAT|O_TRUNC, 0666);
     syslog(LOG_DEBUG,"Entering socket write loop\n");
     while(1)
     {
