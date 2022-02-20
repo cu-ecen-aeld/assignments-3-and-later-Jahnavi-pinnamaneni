@@ -1,279 +1,255 @@
 /*
-* Brief - Implements a "Native Socket Server" as mentioned in assignmented 5 part 1
-* 
-* Author - Deekshith Reddy Patil, patil.deekshithreddy@colorado.edu
-*
-* Reference -https://stackoverflow.com/questions/3060950/how-to-get-ip-address-from-sock-structure-in-c
-*           -https://stackoverflow.com/questions/17954432/creating-a-daemon-in-linux
-*           -https://stackoverflow.com/questions/24194961/how-do-i-use-setsockoptso-reuseaddr
+file: server.c
+description: TCP/IP socket server code 
+Author: Jahnavi Pinnamaneni; japi8358@colorado.edu
 */
 
-#include <stdio.h> 
+#include <stdio.h>
 #include <stdlib.h>
-#include <string.h> 
-#include <unistd.h> 
-#include <sys/types.h>
+#include <string.h>
+
 #include <sys/socket.h>
-#include <sys/stat.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <syslog.h>
 #include <arpa/inet.h>
 
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
-#define PORT_NO             9000
+#include <syslog.h>
 
-int sockfd=-1, clientfd=-1; //file descriptors of client and the server's socket
-int fd=-1; //file descriptor for /var/tmp/aesdsocketdata
-
-char *temp_buff = NULL; //pointer used to store recieved data through socket
-
-int daemonize = 0; //Used to check if the "-d" flag is set. If set, the process is daemonised
-
-//Function that is used to daemonize this process if -d argument was passed
-static void daemonize_process();
+#include <signal.h>
+int server_socket;       //socket_fd
+int client_socket;       //client_fd
+//char *recv_buf = NULL;
 
 /*
-* Brief - Signal handler for SIGINT and SIGTERM
+Signal handler to gracefully terminate when signals SIGINT and SIGTERM arrive
+parameter: signal number
 */
-void signal_handler(int signo)
+void graceful_shutdown(int signo)
 {
-    //Logs message to the syslog “Caught signal, exiting” when SIGINT or SIGTERM is received
-    syslog(LOG_USER,"Caught signal, exiting\n");
-
-    if(clientfd > 0)
-    {
-        close(clientfd);
-    }
-
-    if(sockfd > 0)
-    {
-        shutdown(clientfd,SHUT_RDWR);
-        close(sockfd);
-    }
-
-    if(fd > 0)
-    {
-        //deleting the file /var/tmp/aesdsocketdata
-        remove("/var/tmp/aesdsocketdata");
-        close(fd);
-    }
-
-    if(temp_buff != NULL)
-    {
-        free(temp_buff);
-    }
-
-
-    exit(-1);
+    syslog(LOG_DEBUG, "CAUGHT SIGNAL, EXITING GRACEFULLY \n");
+    //write(1,"Caught signal \n", 14);
+    //write(1,"Exiting gracefully\n", 19);
+    remove("/var/tmp/aesdsocketdata");
+    shutdown(client_socket, SHUT_RDWR);
+    close(client_socket);
+    shutdown(server_socket, SHUT_RDWR);
+    close(server_socket);
+    //if(recv_buf != NULL)
+    	//free(recv_buf);
+    exit(0);
 }
 
+//Application entry point
 int main(int argc, char *argv[])
 {
+    //signal fucntions
+    signal(SIGINT, graceful_shutdown);
+    signal(SIGTERM, graceful_shutdown);
+    
+     //Initialization for syslog
+     openlog(NULL, 0, LOG_USER);
 
-    int n;
-    struct sockaddr_in serv_addr, cli_addr;
-    socklen_t clilen;
 
-    //Paramters used in recieving data
-    char temp;
-    unsigned long idx=0;
+    //create the server socket
+    int get_fd;
+    struct addrinfo hints;
+    struct addrinfo *rp;
+    struct sockaddr_storage cl_addr;
+    socklen_t addr_size;
 
-    //Parameters related to signal handling
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM,signal_handler);
+    memset(&hints, 0 , sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+    hints.ai_protocol = 0;
 
-    //Setup syslog
-    openlog("aesdsocket",0,LOG_USER);
-
-    //Check if process needs to be daemonised
-    if(argc > 2)
+    get_fd = getaddrinfo(NULL, "9000", &hints, &rp);
+    if(get_fd != 0)
     {
-        printf("Invalid arguments to main\nUsage: ./main <-d>\n");
-        exit(-1);
+        perror("ERROR");
+        exit(1);
     }
-
-    if(argc == 2)
+    
+    int d_flag = 0;
+  if(argc == 2)
     {
         if((strcmp(argv[1],"-d")) == 0)
         {
-            daemonize = 1;
+            d_flag = 1;
         }
 
         else
         {
-            printf("Invalid arguments to main\nUsage: ./main <-d>\n");
-            exit(-1);
+            printf("Invalid arguments\n");
+            exit(EXIT_FAILURE);
         }
     }
 
-    //Start the servers socket and bind
-    sockfd = socket(AF_INET,SOCK_STREAM, 0); //open a socket with IPV4, stream type (tcp) and the protocol is TCP (0)
-    printf("sockfd = %d\n",sockfd);
-    if(sockfd < 0)
+    server_socket = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+    if(server_socket == -1)
     {
-        perror("Error opening socket");
-        exit(-1);
+        perror("ERROR");
+        exit(1);
     }
+    if(setsockopt(server_socket,SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int))<0)
+        perror("setsocket(SO_REUSEADDR) failed");
 
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0)
-        perror("setsockopt(SO_REUSEADDR) failed");
-
-    memset((void *)&serv_addr,0,sizeof(serv_addr)); //Set serv_addr to 0
-    
-    //Set the server characteristics 
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY; //This is an IP address that is used when we don't bind a socket to any specific IP. 
-                                            //When we don't know the IP address of our machine, we can use the special IP address INADDR_ANY.
-    serv_addr.sin_port = htons(PORT_NO); //host to network short
-
-    int ret = bind(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr));
-    if(ret < 0)
-     {
-         perror("Binding failed");
-         exit(-1);
-     }
-
-    if(daemonize == 1)
-     {
-         //-d argument was passed to main, now the process has to daemonise itself
-         daemonize_process();
-        // daemon(0,0);
-     }
-
-     //file needed for append (/var/tmp/aesdsocketdata), creating this file if it doesn’t exist
-     fd = open("/var/tmp/aesdsocketdata",O_RDWR | O_TRUNC | O_CREAT, 0666);
-
-     if(fd == -1)
-     {
-         perror("Error opening file");
-         exit(-1);
-     }
-
-    while(1)
+    //bind the socket to our specified IP and port
+    if(bind(server_socket, rp->ai_addr, rp->ai_addrlen) != 0)
     {
-        //start listening on the created socket
-        listen(sockfd, 5);
-
-        clilen = sizeof(cli_addr);
-     
-        clientfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
-
-        if(clientfd < 0)
-        {
-            perror("Error on accept");
-            exit(-1);
-        }
-
-        //Logs message to the syslog “Accepted connection from xxx” where XXXX is the IP address of the connected client
-        syslog(LOG_USER,"Accepted connection from %s\n",inet_ntoa(cli_addr.sin_addr));
-
-        //Initialise a temp buffer to read data
-        temp_buff = (char *)malloc(sizeof(char));
-
-        //Start receiving the packets from socket
-        while(1)
-        {
-
-            n = recv(clientfd,&temp,1,0);
-            
-            if(n < 1)
-            {
-                //Error in recv()
-                perror("recv failed");
-                exit(-1);
-            }
-
-            temp_buff[idx] = temp;
-            idx++;
-            temp_buff = (char *)realloc(temp_buff,sizeof(char) * (idx + 1));
-
-            if(temp == '\n')
-            {
-                //write buffer to the file of len 'idx'
-                n = write(fd,temp_buff,idx);
-                idx = 0;
-                free(temp_buff);
-                temp_buff = NULL;
-                break;
-            }
-
-
-        }
-
-        //read the entire contents of the file and transfer it over the socket
-        lseek(fd,0,SEEK_SET);
-
-        while(1)
-        {
-            n = read(fd,&temp,1);
-            
-
-            if(n==0)
-            {
-
-                //EOF file reached
-                break;
-            }
-            write(clientfd,&temp,1);
-
-
-        }
-        
-        //Syslog: “Closed connection from XXX” where XXX is the IP address of the connected client.
-        syslog(LOG_USER,"Closed connection from %s\n",inet_ntoa(cli_addr.sin_addr));
-
-        //Close the connection with the client and start listening for incoming connections again
-        close(clientfd);
-
+        perror("ERROR");
+        exit(1);
     }
+    syslog(LOG_DEBUG, "Binded successfully");
+    freeaddrinfo(rp);
 
-    //Unreachable code
-    return 0;
-
-}
-
-
-static void daemonize_process()
-{
-    pid_t pid;
-
+    if(d_flag == 1){
+    //Daemonizing the process
+    printf("Daemonizing the process\n");
+    pid_t pid, sid;
     pid = fork();
-
-    if(pid<0)
+    if(pid < 0)
     {
+        printf("Error forking");
         perror("fork");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
-
     if(pid > 0)
     {
-        //Parent Process: has to exit
-        printf("Parent Exiting!. Child PID = %d\n",pid);
-        exit(0);
+        printf("Inside Parent process; Exiting\n");
+        //perror("fork");
+        exit(EXIT_SUCCESS);
     }
-
-    //Child process executes from here on, i.e pid = 0
 
     umask(0);
 
-    //Create a new session and set the child as group leader
-    pid = setsid();
-    
-    if(pid < 0)
-    {
-        perror("setsid");
-        exit(-1);
-    }
 
-    //Change working directory to root directory
+
+    sid = setsid();
+    if(sid < 0)
+    {
+        syslog(LOG_DEBUG,"New SID for child process failed\n");
+        exit(EXIT_FAILURE);
+    }
+    
     chdir("/");
 
-    //close all file descriptors
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
+    }
+    
+    //File to store the recieved data
+    int store_fd;
+    store_fd = open("/var/tmp/aesdsocketdata", O_RDWR|O_CREAT|O_TRUNC, 0666);
+    if(store_fd < 0)
+    {
+        perror("open");
+    }
 
+    //Server socket is established, next Client-Server connection should be made
+    while(1){
+    listen(server_socket, 5);
+    
+    
+    addr_size = sizeof(cl_addr);
+    client_socket = accept(server_socket, (struct sockaddr *)&cl_addr, &addr_size);
+    struct sockaddr_in* pv4Addr = (struct sockaddr_in*)&cl_addr;
+    struct in_addr ipAddr = pv4Addr->sin_addr;
+    char str[INET_ADDRSTRLEN];
+    inet_ntop( AF_INET, &ipAddr,str, INET_ADDRSTRLEN);
+    syslog(LOG_DEBUG, "Accepted connection to %s\n", str);
+
+    //Client-Server connection is made.
+    char *recv_buf = (char *)malloc(1024);
+    int realloc_cnt = 1;
+    int recv_bytes = 0;
+    int recv_buf_size = 0;
+    int written_bytes = 0;
+    if(recv_buf == NULL)
+    {
+        printf("Error: allocating memory\n");
+        close(client_socket);
+        exit(-1);
+    }
+
+    
+    //read bytes
+    while(1)
+    {
+    printf("Entering read loop\n");
+        recv_bytes = recv(client_socket, &recv_buf[recv_buf_size], 1024, 0);
+        recv_buf_size += recv_bytes;
+        if(!recv_bytes)
+        {
+            break;
+        }
+        if(recv_bytes < 1024)
+        {
+            if(recv_buf[recv_buf_size-1] == '\n')
+            {
+                written_bytes = write(store_fd, recv_buf, recv_buf_size);
+                if(written_bytes < 0)
+                {
+                    perror("write");
+                }
+                free(recv_buf);
+                recv_buf = NULL;
+                recv_buf_size = 0;
+                break;
+            }
+        }
+        else
+        {
+            realloc_cnt++;
+            recv_buf = realloc(recv_buf, realloc_cnt * 1024);
+            if(recv_buf == NULL)
+            {
+                printf("error allocating memory\n");
+                //free(recv_buf);
+                close(client_socket);
+                exit(1);
+            }            
+        }
+
+    }
+
+     lseek(store_fd, 0, SEEK_SET);
+
+    while(1)
+    {
+        char temp;
+        int read_bytes = read(store_fd,&temp,1);
+
+        if(read_bytes < 0)
+        {
+            perror("read");
+            exit(-1);
+        }
+
+        if(read_bytes == 0)
+        {
+            break;
+        }
+
+        write(client_socket,&temp,1);
+
+    }
+
+    shutdown(client_socket,SHUT_RDWR);
+    close(client_socket);
+    syslog(LOG_DEBUG, "Closing connection from %s \n",str);
+    if(recv_buf != NULL)
+    	free(recv_buf);
+    printf("Closed connection\n");
+    }
+    close(server_socket);
+    close(store_fd);
+
+    return 0;
 }
