@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 
         else
         {
-            printf("Invalid arguments\n");
+            //printf("Invalid arguments\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -142,7 +142,7 @@ int main(int argc, char *argv[])
     int written_bytes = 0;
     if(recv_buf == NULL)
     {
-        printf("Error: allocating memory\n");
+        //printf("Error: allocating memory\n");
         close(client_socket);
         exit(-1);
     }
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
     //read bytes
     while(1)
     {
-    printf("Entering read loop\n");
+    //f("Entering read loop\n");
         recv_bytes = recv(client_socket, &recv_buf[recv_buf_size], 1024, 0);
         recv_buf_size += recv_bytes;
         if(!recv_bytes)
@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
             recv_buf = realloc(recv_buf, realloc_cnt * 1024);
             if(recv_buf == NULL)
             {
-                printf("error allocating memory\n");
+                //f("error allocating memory\n");
                 //free(recv_buf);
                 close(client_socket);
                 exit(1);
@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
     syslog(LOG_DEBUG, "Closing connection from %s \n",str);
     if(recv_buf != NULL)
     	free(recv_buf);
-    printf("Closed connection\n");
+    //printf("Closed connection\n");
     }
     close(server_socket);
     close(store_fd);
