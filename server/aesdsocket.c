@@ -101,11 +101,13 @@ int main()
     pid = fork();
     if(pid < 0)
     {
+        printf("Error forking");
         perror("fork");
         exit(EXIT_FAILURE);
     }
     if(pid > 0)
     {
+        printf("Inside Parent process; Exiting\n");
         perror("fork");
         exit(EXIT_SUCCESS);
     }
