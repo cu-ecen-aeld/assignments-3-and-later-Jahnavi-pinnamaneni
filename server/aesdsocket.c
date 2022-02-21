@@ -23,7 +23,6 @@ Author: Jahnavi Pinnamaneni; japi8358@colorado.edu
 #include <signal.h>
 int server_socket;       //socket_fd
 int client_socket;       //client_fd
-//char *recv_buf = NULL;
 
 void daemonise_process();
 
@@ -39,8 +38,6 @@ void graceful_shutdown(int signo)
     close(client_socket);
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
-    //if(recv_buf != NULL)
-    	//free(recv_buf);
     exit(0);
 }
 
@@ -85,7 +82,6 @@ int main(int argc, char *argv[])
 
         else
         {
-            //printf("Invalid arguments\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -142,7 +138,6 @@ int main(int argc, char *argv[])
     int written_bytes = 0;
     if(recv_buf == NULL)
     {
-        //printf("Error: allocating memory\n");
         close(client_socket);
         exit(-1);
     }
@@ -151,7 +146,6 @@ int main(int argc, char *argv[])
     //read bytes
     while(1)
     {
-    //f("Entering read loop\n");
         recv_bytes = recv(client_socket, &recv_buf[recv_buf_size], 1024, 0);
         recv_buf_size += recv_bytes;
         if(!recv_bytes)
@@ -179,8 +173,6 @@ int main(int argc, char *argv[])
             recv_buf = realloc(recv_buf, realloc_cnt * 1024);
             if(recv_buf == NULL)
             {
-                //f("error allocating memory\n");
-                //free(recv_buf);
                 close(client_socket);
                 exit(1);
             }            
@@ -190,7 +182,6 @@ int main(int argc, char *argv[])
     }
 
     lseek(store_fd, 0, SEEK_SET);
-    syslog(LOG_DEBUG,"Entering socket write loop\n");
     while(1)
     {
         char temp;
@@ -210,14 +201,12 @@ int main(int argc, char *argv[])
         write(client_socket,&temp,1);
 
     }
-    syslog(LOG_DEBUG,"Exiting write loop!\n");
 
     shutdown(client_socket,SHUT_RDWR);
     close(client_socket);
     syslog(LOG_DEBUG, "Closing connection from %s \n",str);
     if(recv_buf != NULL)
     	free(recv_buf);
-    //printf("Closed connection\n");
     }
     close(server_socket);
     close(store_fd);
