@@ -118,95 +118,100 @@ int main(int argc, char *argv[])
     }
 
     //Server socket is established, next Client-Server connection should be made
-    while(1){
-    listen(server_socket, 5);
-    
-    
-    addr_size = sizeof(cl_addr);
-    client_socket = accept(server_socket, (struct sockaddr *)&cl_addr, &addr_size);
-    struct sockaddr_in* pv4Addr = (struct sockaddr_in*)&cl_addr;
-    struct in_addr ipAddr = pv4Addr->sin_addr;
-    char str[INET_ADDRSTRLEN];
-    inet_ntop( AF_INET, &ipAddr,str, INET_ADDRSTRLEN);
-    syslog(LOG_DEBUG, "Accepted connection to %s\n", str);
-
-    //Client-Server connection is made.
-    char *recv_buf = (char *)malloc(1024);
-    int realloc_cnt = 1;
-    int recv_bytes = 0;
-    int recv_buf_size = 0;
-    int written_bytes = 0;
-    if(recv_buf == NULL)
-    {
-        close(client_socket);
-        exit(-1);
-    }
-
-    
-    //read bytes
     while(1)
     {
-        recv_bytes = recv(client_socket, &recv_buf[recv_buf_size], 1024, 0);
-        recv_buf_size += recv_bytes;
-        if(!recv_bytes)
-        {
-            break;
-        }
-        if(recv_bytes < 1024)
-        {
-            if(recv_buf[recv_buf_size-1] == '\n')
-            {
-                written_bytes = write(store_fd, recv_buf, recv_buf_size);
-                if(written_bytes < 0)
-                {
-                    perror("write");
-                }
-                free(recv_buf);
-                recv_buf = NULL;
-                recv_buf_size = 0;
-                break;
-            }
-        }
-        else
-        {
-            realloc_cnt++;
-            recv_buf = realloc(recv_buf, realloc_cnt * 1024);
-            if(recv_buf == NULL)
-            {
-                close(client_socket);
-                exit(1);
-            }            
-        }
+        listen(server_socket, 5);        
+        
+        addr_size = sizeof(cl_addr);
+        client_socket = accept(server_socket, (struct sockaddr *)&cl_addr, &addr_size);
+        struct sockaddr_in* pv4Addr = (struct sockaddr_in*)&cl_addr;
+        struct in_addr ipAddr = pv4Addr->sin_addr;
+        char str[INET_ADDRSTRLEN];
+        inet_ntop( AF_INET, &ipAddr,str, INET_ADDRSTRLEN);
+        syslog(LOG_DEBUG, "Accepted connection to %s\n", str);
 
+        //Create a thread
+        //Add the details to linked list
+        //Check if complete inside the thread
+        //pthread_join
 
-    }
-
-    lseek(store_fd, 0, SEEK_SET);
-    while(1)
-    {
-        char temp;
-        int read_bytes = read(store_fd,&temp,1);
-
-        if(read_bytes < 0)
+        //Client-Server connection is made.
+        char *recv_buf = (char *)malloc(1024);
+        int realloc_cnt = 1;
+        int recv_bytes = 0;
+        int recv_buf_size = 0;
+        int written_bytes = 0;
+        if(recv_buf == NULL)
         {
-            perror("read");
+            close(client_socket);
             exit(-1);
         }
 
-        if(read_bytes == 0)
+        
+        //read bytes
+        while(1)
         {
-            break;
+            recv_bytes = recv(client_socket, &recv_buf[recv_buf_size], 1024, 0);
+            recv_buf_size += recv_bytes;
+            if(!recv_bytes)
+            {
+                break;
+            }
+            if(recv_bytes < 1024)
+            {
+                if(recv_buf[recv_buf_size-1] == '\n')
+                {
+                    written_bytes = write(store_fd, recv_buf, recv_buf_size);
+                    if(written_bytes < 0)
+                    {
+                        perror("write");
+                    }
+                    free(recv_buf);
+                    recv_buf = NULL;
+                    recv_buf_size = 0;
+                    break;
+                }
+            }
+            else
+            {
+                realloc_cnt++;
+                recv_buf = realloc(recv_buf, realloc_cnt * 1024);
+                if(recv_buf == NULL)
+                {
+                    close(client_socket);
+                    exit(1);
+                }            
+            }
+
+
         }
 
-        write(client_socket,&temp,1);
+        lseek(store_fd, 0, SEEK_SET);
+        while(1)
+        {
+            char temp;
+            int read_bytes = read(store_fd,&temp,1);
 
-    }
+            if(read_bytes < 0)
+            {
+                perror("read");
+                exit(-1);
+            }
 
-    shutdown(client_socket,SHUT_RDWR);
-    close(client_socket);
-    syslog(LOG_DEBUG, "Closing connection from %s \n",str);
-    if(recv_buf != NULL)
-    	free(recv_buf);
+            if(read_bytes == 0)
+            {
+                break;
+            }
+
+            write(client_socket,&temp,1);
+
+        }
+
+        shutdown(client_socket,SHUT_RDWR);
+        close(client_socket);
+        syslog(LOG_DEBUG, "Closing connection from %s \n",str);
+        if(recv_buf != NULL)
+            free(recv_buf);
     }
     close(server_socket);
     close(store_fd);
