@@ -264,7 +264,8 @@ int main(int argc, char *argv[])
     {
         perror("open");
     }
-    alarm(10);
+    //alarm(10);
+    int first_time = 0;
     //Server socket is established, next Client-Server connection should be made
     while(1)
     {
@@ -278,6 +279,13 @@ int main(int argc, char *argv[])
         char str[INET_ADDRSTRLEN];
         inet_ntop( AF_INET, &ipAddr,str, INET_ADDRSTRLEN);
         syslog(LOG_DEBUG, "Accepted connection to %s\n", str);
+
+        
+        if(!first_time)
+        {
+            alarm(10);
+            first_time = 1;
+        }
 
         //Create a thread
         thread_info_t *th_info = NULL;
