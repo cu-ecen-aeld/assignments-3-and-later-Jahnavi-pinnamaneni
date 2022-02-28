@@ -1,12 +1,19 @@
 /*
 file: server.c
-description: TCP/IP socket server code 
+description: TCP/IP socket server code; This server listens for connection requests over port 9000, 
+            it stores the messages received from the client in a local file and relays it back to the
+            client after the complete packet is received.
+            A complete packet is delimited by \n, once a complete packet is received, the packet is sent
+            back to the client and the connection is ended.
+            The server then listens for new connections and the process repeats.
+            Multiple clients can connect to the server at a time.
 Author: Jahnavi Pinnamaneni; japi8358@colorado.edu
 */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -26,8 +33,9 @@ Author: Jahnavi Pinnamaneni; japi8358@colorado.edu
 #include "queue.h"
 #include <time.h>
 
-int server_socket;       //socket_fd
-int client_socket;       //client_fd
+int server_socket;              //socket_fd
+int client_socket;              //client_fd
+bool alarm_sig_flag = false;    // boolean to indicate 10sec alarm for timestamp
 
 void daemonise_process();
 
@@ -39,16 +47,26 @@ void graceful_shutdown(int signo)
 {
     syslog(LOG_DEBUG, "CAUGHT SIGNAL, EXITING GRACEFULLY \n");
     remove("/var/tmp/aesdsocketdata");
-    // shutdown(client_socket, SHUT_RDWR);
-    // close(client_socket);
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
     closelog(); 
     exit(0);
 }
+
+/*
+Signal handler to handle alarm of 10sec
+parameter: signal number
+*/
+void alarm_sig_handler(int signo)
+{
+    alarm_sig_flag = true;
+}
+
+/*
+This structure contains the information needed for multithreading of clients
+*/
 typedef struct thread_info
 {
-    //char ipv4_addr[50];
     pthread_t threadId;
     int client_fd;
     int complete_flag;
@@ -57,132 +75,138 @@ typedef struct thread_info
 
 pthread_mutex_t mutex;
 
+/*
+This is a thread safe function to handle receiving and sending of messages from and to a client
+parameters: it takes the thread_info structure as input
+*/
 void * server_thread(void * thread_info)
 {
     thread_info_t *th_info = (thread_info_t *)thread_info;
-    //printf("client: %d\n",th_info->client_fd);
+
     int store_fd;
     store_fd = open("/var/tmp/aesdsocketdata", O_RDWR|O_APPEND, 0666);
-    //printf("store_fd: %d\n",store_fd);
-    //Client-Server connection is made.
-        char *recv_buf = (char *)malloc(1024);
-        int realloc_cnt = 1;
-        int recv_bytes = 0;
-        int recv_buf_size = 0;
-        int written_bytes = 0;
-        if(recv_buf == NULL)
+
+    char *recv_buf = (char *)malloc(1024);
+    if(recv_buf == NULL)
+    {
+        perror("malloc");
+        close(client_socket);
+        exit(-1);
+    }
+
+    int realloc_cnt = 1;
+    int recv_bytes = 0;
+    int recv_buf_size = 0;
+    int written_bytes = 0;
+
+    //receive message
+    while(1)
+    {
+        recv_bytes = recv(th_info->client_fd, &recv_buf[recv_buf_size], 1024, 0);
+        recv_buf_size += recv_bytes;      //variable to hold the total bytes received thus far
+        if(!recv_bytes)
         {
-            close(client_socket);
+            break;
+        }
+
+        if(recv_bytes < 1024)
+        {
+            //checking if packet is complete
+            if(recv_buf[recv_buf_size-1] == '\n')
+            {
+                pthread_mutex_lock(&mutex);
+                written_bytes = write(store_fd, recv_buf, recv_buf_size);
+                pthread_mutex_unlock(&mutex);
+                if(written_bytes < 0)
+                {
+                    perror("write");
+                }
+                free(recv_buf);
+                recv_buf = NULL;
+                recv_buf_size = 0;
+                break;
+            }
+        }
+        else
+        {
+            //if packet is not complete, extra memory is added to handle long strings
+            realloc_cnt++;
+            recv_buf = realloc(recv_buf, realloc_cnt * 1024);
+            if(recv_buf == NULL)
+            {
+                close(client_socket);
+                free(recv_buf);
+                exit(1);
+            }            
+        }
+
+
+    }
+
+    //moving the pointer to the beginning of the file to send back the complete packet
+    lseek(store_fd, 0, SEEK_SET);
+    while(1)
+    {
+        //one byte is read and sent back to the client at a time
+        char temp;
+        int read_bytes = read(store_fd,&temp,1);
+        if(read_bytes < 0)
+        {
+            perror("read");
             exit(-1);
         }
 
-        //printf("thread initialization complete\n");
-        //read bytes
-        pthread_mutex_lock(&mutex);
-        while(1)
+        if(read_bytes == 0)
         {
-            //pthread_mutex_lock(mutex);
-            recv_bytes = recv(th_info->client_fd, &recv_buf[recv_buf_size], 1024, 0);
-            recv_buf_size += recv_bytes;
-            if(!recv_bytes)
-            {
-                break;
-            }
-            if(recv_bytes < 1024)
-            {
-                if(recv_buf[recv_buf_size-1] == '\n')
-                {
-                    
-                    written_bytes = write(store_fd, recv_buf, recv_buf_size);
-                    //printf("recv_buf = %s\n", recv_buf);
-                    //printf("written bytes = %d\n",written_bytes);
-                    if(written_bytes < 0)
-                    {
-                        perror("write");
-                    }
-                    free(recv_buf);
-                    recv_buf = NULL;
-                    recv_buf_size = 0;
-                    break;
-                }
-            }
-            else
-            {
-                realloc_cnt++;
-                recv_buf = realloc(recv_buf, realloc_cnt * 1024);
-                if(recv_buf == NULL)
-                {
-                    close(client_socket);
-                    free(recv_buf);
-                    exit(1);
-                }            
-            }
-
-
+            break;
         }
 
-        lseek(store_fd, 0, SEEK_SET);
-        while(1)
-        {
-            char temp;
-            int read_bytes = read(store_fd,&temp,1);
-            //printf("read_bytes %d\t",read_bytes);
-            //printf("%c", temp);
-            if(read_bytes < 0)
-            {
-                perror("read");
-                exit(-1);
-            }
-
-            if(read_bytes == 0)
-            {
-                break;
-            }
-
-            write(th_info->client_fd,&temp,1);
-            
-
-        }
+        write(th_info->client_fd,&temp,1);
         
-        pthread_mutex_unlock(&mutex);
-        th_info->complete_flag = 1;
 
-        close(store_fd);
-        
-        if(recv_buf != NULL)
-            free(recv_buf);
+    }
+    
+    th_info->complete_flag = 1;
+
+    close(store_fd);
+    
+    if(recv_buf != NULL)
+        free(recv_buf);
     return 0;
 }
 
-void alarm_handler (int signum)
+void *alarm_handler (void * arg)
 {
     time_t rawtime;
     struct tm *info;
     char buffer[80];
+    
+    while(1)
+    {
+        sleep(1);
+        if(alarm_sig_flag)
+        {            
+            alarm_sig_flag = false;
+            time(&rawtime);
 
-    time(&rawtime);
-
-    info = localtime(&rawtime);
-    //printf("alarm handler\n");
-    strftime(buffer,80, "timestamp: %Y %m %d %H %M %S\n",info);
-    //printf("%s\n",buffer);
-    pthread_mutex_lock(&mutex);
-    int store_fd;
-    store_fd = open("/var/tmp/aesdsocketdata", O_WRONLY|O_APPEND, 0666);  
-    //printf("fd: %d",store_fd);  
-    int write_ret = write(store_fd, buffer, 31);  
-    //printf("bytes: %d\n",write_ret); 
-    if(write_ret < 0)
-        perror("write");
-    close(store_fd);
-    pthread_mutex_unlock(&mutex);
-    alarm(10);
+            info = localtime(&rawtime);
+            strftime(buffer,80, "timestamp: %Y %m %d %H %M %S\n",info);
+            pthread_mutex_lock(&mutex);
+            int store_fd;
+            store_fd = open("/var/tmp/aesdsocketdata", O_WRONLY|O_APPEND, 0666);  
+            int write_ret = write(store_fd, buffer, 31);  
+            if(write_ret < 0)
+                perror("write");
+            close(store_fd);
+            pthread_mutex_unlock(&mutex);
+            alarm(10);
+        }
+    }
 }
 
 //Application entry point
 int main(int argc, char *argv[])
 {
-    //printf("Inside main");
     TAILQ_HEAD(head_s, thread_info) head;
     // Initialize the head before use
     TAILQ_INIT(&head);
@@ -193,7 +217,7 @@ int main(int argc, char *argv[])
     //signal fucntions
     signal(SIGINT, graceful_shutdown);
     signal(SIGTERM, graceful_shutdown);
-    signal(SIGALRM, alarm_handler);
+    signal(SIGALRM, alarm_sig_handler);
     
     
     //Initialization for syslog
@@ -264,7 +288,6 @@ int main(int argc, char *argv[])
     {
         perror("open");
     }
-    //alarm(10);
     int first_time = 0;
     //Server socket is established, next Client-Server connection should be made
     while(1)
@@ -303,12 +326,16 @@ int main(int argc, char *argv[])
             perror("pthread_create");
             free(th_info);
         }
-
+        pthread_t thread_id;
+        int alarm_err = pthread_create(&thread_id,NULL, alarm_handler, NULL);
+        if(alarm_err)
+        {
+            perror("pthread_create");
+        }
         TAILQ_INSERT_TAIL(&head, th_info, nodes);
 
         TAILQ_FOREACH(th_info, &head, nodes)
         {
-            //int join_ret = pthread_join(th_info->threadId,NULL);
             if(th_info->complete_flag)
             {
                 shutdown(th_info->client_fd,SHUT_RDWR);
