@@ -42,13 +42,6 @@ int aesd_open(struct inode *inode, struct file *filp)
 	 */
 	dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
 	filp->private_data = dev;
-	/* now trim to 0 the length of the device if open was write-only */
-	// if ( (filp->f_flags & O_ACCMODE) == O_WRONLY) {
-	// 	if (mutex_lock_interruptible(&dev->lock))
-	// 		return -ERESTARTSYS;
-	// 	scull_trim(dev); /* ignore errors */
-	// 	mutex_unlock(&dev->lock);
-	// }
 	return 0;
 }
 
@@ -98,8 +91,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	}
 
 	*f_pos = *f_pos + count_bytes;
-
-	//count = read_entry->size - offset;
 	retval = count_bytes;
 
   out:
@@ -110,8 +101,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	//char * temp = NULL;
-	//int is_complete = 0;
 	struct aesd_dev *dev = filp->private_data;
 	size_t copy_from_user_bytes;
 	ssize_t retval = -ENOMEM;
@@ -126,7 +115,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 		dev->entry.buffptr = kzalloc(count*(sizeof(char)),GFP_KERNEL);
 	else
 		dev->entry.buffptr = krealloc(dev->entry.buffptr,(dev->entry.size + count), GFP_KERNEL);
-	//PDEBUG("%p", dev->entry.buffptr);
 	if(dev->entry.buffptr == NULL)
 	{
 		PDEBUG("ERROR: aesd_write, no memory available for dynamic allocation\n");
@@ -142,27 +130,17 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	retval = count;
 
 	PDEBUG("Recieved data\n");
-	//PDEBUG("last char %c",(char)dev->entry.buffptr[count-1]);
 	if(strchr((char*)(dev->entry.buffptr),'\n'))
 	{
 		PDEBUG("Detected \n");
 		if(dev->device_buffer.full)
 		{
-			PDEBUG("IN : %d OUT : %d\n", dev->device_buffer.in_offs, dev->device_buffer.out_offs);
 			kfree(dev->device_buffer.entry[dev->device_buffer.out_offs].buffptr);
-			aesd_circular_buffer_add_entry(&dev->device_buffer, &dev->entry);
-			dev->entry.buffptr = NULL;
-			dev->entry.size = 0;
-			PDEBUG("Write complete full\n");
 		}
-		else
-		{
-			PDEBUG("IN : %d OUT : %d\n", dev->device_buffer.in_offs, dev->device_buffer.out_offs);
 			aesd_circular_buffer_add_entry(&dev->device_buffer, &dev->entry);
 			dev->entry.buffptr = NULL;
 			dev->entry.size = 0;
 			PDEBUG("Write complete no full\n");
-		}
 	}
 		
   out:
@@ -209,8 +187,6 @@ int aesd_init_module(void)
 	/**
 	 * TODO: initialize the AESD specific portion of the device
 	 */
-	//Initializing the Circular buffer
-	//aesd_circular_buffer_init(aesd_device.device_buffer);
 	mutex_init(&aesd_device.lock);
 	result = aesd_setup_cdev(&aesd_device);
 

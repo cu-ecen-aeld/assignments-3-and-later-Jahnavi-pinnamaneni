@@ -33,6 +33,16 @@ Author: Jahnavi Pinnamaneni; japi8358@colorado.edu
 #include "queue.h"
 #include <time.h>
 
+#define USE_AESD_CHAR_DEVICE 1
+
+#ifdef USE_AESD_CHAR_DEVICE
+#define TEMP_FILE "/dev/aesdchar"
+#define ALARM_AESD_CHAR 1
+#else
+#define TEMP_FILE "/var/tmp/aesdsocketdata"
+#define ALARM_AESD_CHAR 0
+#endif
+
 int server_socket;              //socket_fd
 int client_socket;              //client_fd
 bool alarm_sig_flag = false;    // boolean to indicate 10sec alarm for timestamp
@@ -46,7 +56,7 @@ parameter: signal number
 void graceful_shutdown(int signo)
 {
     syslog(LOG_DEBUG, "CAUGHT SIGNAL, EXITING GRACEFULLY \n");
-    remove("/var/tmp/aesdsocketdata");
+    remove(TEMP_FILE);
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
     closelog(); 
@@ -84,7 +94,7 @@ void * server_thread(void * thread_info)
     thread_info_t *th_info = (thread_info_t *)thread_info;
 
     int store_fd;
-    store_fd = open("/var/tmp/aesdsocketdata", O_RDWR|O_APPEND, 0666);
+    store_fd = open(TEMP_FILE, O_RDWR|O_APPEND, 0666);
 
     char *recv_buf = (char *)malloc(1024);
     if(recv_buf == NULL)
@@ -193,7 +203,7 @@ void *alarm_handler (void * arg)
             strftime(buffer,80, "timestamp: %Y %m %d %H %M %S\n",info);
             pthread_mutex_lock(&mutex);
             int store_fd;
-            store_fd = open("/var/tmp/aesdsocketdata", O_WRONLY|O_APPEND, 0666);  
+            store_fd = open(TEMP_FILE, O_WRONLY|O_APPEND, 0666);  
             int write_ret = write(store_fd, buffer, 31);  
             if(write_ret < 0)
                 perror("write");
@@ -283,7 +293,7 @@ int main(int argc, char *argv[])
     
     //File to store the recieved data
     int store_fd;
-    store_fd = open("/var/tmp/aesdsocketdata", O_CREAT|O_TRUNC, 0666);
+    store_fd = open(TEMP_FILE, O_CREAT|O_TRUNC, 0666);
     if(store_fd < 0)
     {
         perror("open");
@@ -303,11 +313,13 @@ int main(int argc, char *argv[])
         inet_ntop( AF_INET, &ipAddr,str, INET_ADDRSTRLEN);
         syslog(LOG_DEBUG, "Accepted connection to %s\n", str);
 
-        
-        if(!first_time)
+        if(!(ALARM_AESD_CHAR))
         {
-            alarm(10);
-            first_time = 1;
+            if(!first_time)
+            {
+                alarm(10);
+                first_time = 1;
+            }
         }
 
         //Create a thread
