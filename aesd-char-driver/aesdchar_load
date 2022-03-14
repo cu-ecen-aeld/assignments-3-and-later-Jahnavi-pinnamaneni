@@ -29,3 +29,4 @@ chgrp $group /dev/${device}
 #echo "4 complete"
 chmod $mode  /dev/${device}
 #echo "5 complete"
+echo "aesdchar load complete"
