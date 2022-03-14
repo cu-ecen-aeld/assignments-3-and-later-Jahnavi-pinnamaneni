@@ -46,6 +46,7 @@ Author: Jahnavi Pinnamaneni; japi8358@colorado.edu
 int server_socket;              //socket_fd
 int client_socket;              //client_fd
 bool alarm_sig_flag = false;    // boolean to indicate 10sec alarm for timestamp
+pthread_mutex_t mutex;
 
 void daemonise_process();
 
@@ -60,6 +61,7 @@ void graceful_shutdown(int signo)
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
     closelog(); 
+    pthread_mutex_destroy(&mutex);
     exit(0);
 }
 
@@ -69,6 +71,7 @@ parameter: signal number
 */
 void alarm_sig_handler(int signo)
 {
+    //printf("Inside alarm handler\n");
     alarm_sig_flag = true;
 }
 
@@ -83,7 +86,7 @@ typedef struct thread_info
     TAILQ_ENTRY(thread_info) nodes;
 }thread_info_t;
 
-pthread_mutex_t mutex;
+
 
 /*
 This is a thread safe function to handle receiving and sending of messages from and to a client
@@ -126,6 +129,7 @@ void * server_thread(void * thread_info)
             {
                 pthread_mutex_lock(&mutex);
                 written_bytes = write(store_fd, recv_buf, recv_buf_size);
+                close(store_fd);
                 pthread_mutex_unlock(&mutex);
                 if(written_bytes < 0)
                 {
@@ -154,7 +158,8 @@ void * server_thread(void * thread_info)
     }
 
     //moving the pointer to the beginning of the file to send back the complete packet
-    lseek(store_fd, 0, SEEK_SET);
+    //lseek(store_fd, 0, SEEK_SET);
+    store_fd = open(TEMP_FILE, O_RDWR|O_APPEND, 0666);
     while(1)
     {
         //one byte is read and sent back to the client at a time
@@ -163,6 +168,7 @@ void * server_thread(void * thread_info)
         if(read_bytes < 0)
         {
             perror("read");
+            close(store_fd);
             exit(-1);
         }
 
@@ -360,10 +366,13 @@ int main(int argc, char *argv[])
             }
         }        
     }
+    
+    remove(TEMP_FILE);
     close(server_socket);
     close(store_fd);
-    closelog();
-    return 0;
+    closelog();    
+    pthread_mutex_destroy(&mutex);
+    exit(0);
 }
 
 

@@ -187,6 +187,7 @@ int aesd_init_module(void)
 	/**
 	 * TODO: initialize the AESD specific portion of the device
 	 */
+
 	mutex_init(&aesd_device.lock);
 	result = aesd_setup_cdev(&aesd_device);
 
