@@ -298,12 +298,12 @@ int main(int argc, char *argv[])
     }
     
     //File to store the recieved data
-    int store_fd;
-    store_fd = open(TEMP_FILE, O_CREAT|O_TRUNC, 0666);
-    if(store_fd < 0)
-    {
-        perror("open");
-    }
+    //int store_fd;
+    //store_fd = open(TEMP_FILE, O_CREAT|O_TRUNC, 0666);
+    //if(store_fd < 0)
+    //{
+    //    perror("open");
+    //}
     int first_time = 0;
     //Server socket is established, next Client-Server connection should be made
     while(1)
@@ -369,7 +369,7 @@ int main(int argc, char *argv[])
     
     remove(TEMP_FILE);
     close(server_socket);
-    close(store_fd);
+    //close(store_fd);
     closelog();    
     pthread_mutex_destroy(&mutex);
     exit(0);
