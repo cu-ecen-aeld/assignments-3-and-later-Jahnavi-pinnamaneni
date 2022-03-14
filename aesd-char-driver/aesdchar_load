@@ -20,12 +20,12 @@ else
 fi
 
 major=$(awk "\$2==\"$module\" {print \$1}" /proc/devices)
-echo "1 complete"
+#echo "1 complete"
 rm -f /dev/${device}
-echo "2 complete"
+#echo "2 complete"
 mknod /dev/${device} c $major 0
-echo "3 complete"
+#echo "3 complete"
 chgrp $group /dev/${device}
-echo "4 complete"
+#echo "4 complete"
 chmod $mode  /dev/${device}
-echo "5 complete"
+#echo "5 complete"

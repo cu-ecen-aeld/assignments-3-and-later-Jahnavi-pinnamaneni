@@ -199,6 +199,9 @@ int aesd_init_module(void)
 
 void aesd_cleanup_module(void)
 {
+	uint8_t index;
+
+	struct aesd_buffer_entry *entry;
 	dev_t devno = MKDEV(aesd_major, aesd_minor);
 
 	cdev_del(&aesd_device.cdev);
@@ -207,6 +210,10 @@ void aesd_cleanup_module(void)
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 */
 	//AESD_CIRCULAR_BUFFER_FOREACH
+	kfree(aesd_device.entry.buffptr);
+  	AESD_CIRCULAR_BUFFER_FOREACH(entry,&aesd_device.device_buffer,index) {
+  		kfree(entry->buffptr);
+	}
 	unregister_chrdev_region(devno, 1);
 }
 

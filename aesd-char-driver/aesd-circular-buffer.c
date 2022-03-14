@@ -43,7 +43,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     {
         total_buf_size += buffer->entry[i].size;
     }
-    printk("total size %ld\n", total_buf_size);
+    //printk("total size %ld\n", total_buf_size);
     if(char_offset >= total_buf_size)
         return NULL;
     if(char_offset < val)
