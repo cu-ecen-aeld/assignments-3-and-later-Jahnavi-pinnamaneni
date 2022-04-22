@@ -18,8 +18,15 @@ else
     echo "Local file ${module}.ko not found, attempting to modprobe"
     modprobe ${module} || exit 1
 fi
+
 major=$(awk "\$2==\"$module\" {print \$1}" /proc/devices)
+#echo "1 complete"
 rm -f /dev/${device}
+#echo "2 complete"
 mknod /dev/${device} c $major 0
+#echo "3 complete"
 chgrp $group /dev/${device}
+#echo "4 complete"
 chmod $mode  /dev/${device}
+#echo "5 complete"
+echo "aesdchar load complete"
